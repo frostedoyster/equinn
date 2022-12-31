@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import ase
 from dataset import get_dataset_slices
+from spherical_expansions import get_vector_expansions
 
 def run_fit(parameters):
 
@@ -41,28 +42,14 @@ def run_fit(parameters):
     
     train_structures, test_structures = get_dataset_slices(DATASET_PATH, train_slice, test_slice)
 
-    structure = train_structures[0]
+    structures = train_structures[:1000]
+    hypers = {
+        "cutoff radius": r_cut
+    }
 
-    centers, neighbors, unit_cell_shift_vectors = ase.neighborlist.primitive_neighbor_list(
-        quantities="ijS",
-        pbc=structure.pbc,
-        cell=structure.cell,
-        positions=structure.positions,
-        cutoff=r_cut,
-        self_interaction=True,
-        use_scaled_positions=False,
-    )
+    tmap = get_vector_expansions(structures, hypers)
 
-    pairs_to_throw = np.logical_and(centers == neighbors, np.all(unit_cell_shift_vectors == 0, axis=1))
-    pairs_to_keep = np.logical_not(pairs_to_throw)
-    centers = centers[pairs_to_keep]
-    neighbors = neighbors[pairs_to_keep]
-    unit_cell_shift_vectors = unit_cell_shift_vectors[pairs_to_keep]
-
-    for center, neighbor, vector in zip(centers, neighbors, unit_cell_shift_vectors):
-        print(center, neighbor, vector)
-
-    positions = torch.tensor(structure.positions, dtype=torch.get_default_dtype())
+    
     
 
 
