@@ -3,17 +3,42 @@ import torch
 import ase
 from equistore import TensorMap, Labels, TensorBlock
 
-# from spherical_harmonics import 
-# from radial_basis import RadialBasis... Needs to contain potential NN... and therefore vector expansion and spherical expansion need to be a torch nn module
+# from spherical_harmonics import SphericalHarmonics  #This will only contain l_max... torch autograd function
+from radial_basis import RadialBasis
 
 
-def get_vector_expansions(structures, hypers):
+class VectorExpansion(torch.nn.Module):
 
-    cutoff_radius = hypers["cutoff radius"]
-    cartesian_vectors = get_cartesian_vectors(structures, cutoff_radius)
+    def __init__(self, hypers) -> None:
+        super().__init__()
 
-    #spherical_harmonics = 
-    #radial_basis = 
+        self.hypers = hypers
+        l_max = ?
+        self.spherical_harmonics = SphericalHarmonics(l_max)
+        self.radial_basis = RadialBasis(radial_hypers)
+
+        # self.mlps = ...  # One for each l?
+
+    def forward(self, structures):
+
+        cutoff_radius = self.hypers["cutoff radius"]
+        cartesian_vectors = get_cartesian_vectors(structures, cutoff_radius)
+
+        bare_cartesian_vectors = cartesian_vectors.values.squeeze(dim=-1)
+
+        r = torch.sqrt(
+            (bare_cartesian_vectors**2)
+            .sum(dim=-1)
+        )
+
+        radial_basis = 
+
+        cos_theta = bare_cartesian_vectors[:, 2]/r
+        phi = torch.atan2(bare_cartesian_vectors[:, 1]/bare_cartesian_vectors[:, 0])
+
+        
+
+
 
 
 def get_cartesian_vectors(structures, cutoff_radius):
