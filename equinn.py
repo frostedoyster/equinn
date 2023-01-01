@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import ase
 from dataset import get_dataset_slices
-from spherical_expansions import get_vector_expansions
+from spherical_expansions import VectorExpansion
 
 def run_fit(parameters):
 
@@ -44,10 +44,18 @@ def run_fit(parameters):
 
     structures = train_structures[:1000]
     hypers = {
-        "cutoff radius": r_cut
+        "cutoff radius": r_cut,
+        "radial basis": {
+            "cutoff radius": r_cut,
+            "mode": "single bessel",
+            "lmax": 3,
+            "nmax": 8
+        },
+        "lmax": 3
     }
 
-    tmap = get_vector_expansions(structures, hypers)
+    vector_expansion_calculator = VectorExpansion(hypers)
+    tmap = vector_expansion_calculator(structures)
 
     
     

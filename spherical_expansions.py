@@ -13,9 +13,8 @@ class VectorExpansion(torch.nn.Module):
         super().__init__()
 
         self.hypers = hypers
-        l_max = ?
-        self.spherical_harmonics = SphericalHarmonics(l_max)
-        self.radial_basis = RadialBasis(radial_hypers)
+        # self.spherical_harmonics = SphericalHarmonics(hypers["l_max"])
+        self.radial_basis_calculator = RadialBasis(hypers["radial basis"])
 
         # self.mlps = ...  # One for each l?
 
@@ -31,10 +30,10 @@ class VectorExpansion(torch.nn.Module):
             .sum(dim=-1)
         )
 
-        radial_basis = 
+        radial_basis = self.radial_basis_calculator(r)
 
         cos_theta = bare_cartesian_vectors[:, 2]/r
-        phi = torch.atan2(bare_cartesian_vectors[:, 1]/bare_cartesian_vectors[:, 0])
+        phi = torch.atan2(bare_cartesian_vectors[:, 1], bare_cartesian_vectors[:, 0])
 
         
 
