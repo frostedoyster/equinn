@@ -5,7 +5,11 @@ spherical_bessel = cpp_extension.CppExtension('spherical_bessel',
       ["spherical_bessel.cc"], 
       extra_compile_args=["-std=c++17", "-fopenmp", "-w"])
 
-ext_modules = [spherical_bessel]
+spherical_harmonics = cpp_extension.CppExtension('spherical_harmonics', 
+      ["spherical_harmonics.cc"], 
+      extra_compile_args=["-std=c++17", "-fopenmp", "-w"])
+
+ext_modules = [spherical_bessel, spherical_harmonics]
 
 setup(name='equinn',
       packages = find_packages(),

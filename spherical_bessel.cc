@@ -5,7 +5,7 @@
 
 
 template<typename scalar_t>
-void _sperical_bessel_first_kind_forward(
+void _spherical_bessel_first_kind_forward(
     int l,
     torch::Tensor x,
     torch::Tensor output
@@ -26,15 +26,15 @@ void _sperical_bessel_first_kind_forward(
 }
 
 
-torch::Tensor sperical_bessel_first_kind_forward(
+torch::Tensor spherical_bessel_first_kind_forward(
     int l,
     torch::Tensor x
 ) {
 
     auto output = torch::empty_like(x);
 
-    AT_DISPATCH_FLOATING_TYPES(x.type(), "sperical_bessel_first_kind_forward", ([&] {
-        _sperical_bessel_first_kind_forward<scalar_t>(
+    AT_DISPATCH_FLOATING_TYPES(x.type(), "spherical_bessel_first_kind_forward", ([&] {
+        _spherical_bessel_first_kind_forward<scalar_t>(
             l,
             x, 
             output
@@ -46,7 +46,7 @@ torch::Tensor sperical_bessel_first_kind_forward(
 
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("first_kind_forward", &sperical_bessel_first_kind_forward, "spherical Bessel first kind (forward)");
+  m.def("first_kind_forward", &spherical_bessel_first_kind_forward, "spherical Bessel first kind (forward)");
 }
 
 

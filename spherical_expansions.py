@@ -7,6 +7,19 @@ from equistore import TensorMap, Labels, TensorBlock
 from radial_basis import RadialBasis
 
 
+class SphericalExpansion(torch.nn.Module):
+
+    def __init__(self, hypers, all_species) -> None:
+        super().__init__()
+
+        self.hypers = hypers
+        self.all_species = all_species
+        self.vector_expansion = VectorExpansion(hypers)
+
+    def forward(self, structures):
+        return 0
+
+
 class VectorExpansion(torch.nn.Module):
 
     def __init__(self, hypers) -> None:
@@ -35,9 +48,37 @@ class VectorExpansion(torch.nn.Module):
         cos_theta = bare_cartesian_vectors[:, 2]/r
         phi = torch.atan2(bare_cartesian_vectors[:, 1], bare_cartesian_vectors[:, 0])
 
-        
+        spherical_harmonics = self.spherical_harmonics_calculator(cos_theta, phi)
 
+        # Use broadcasting semantics to get the products in equistore shape
+        vector_expansion_blocks = []
+        for l, radial_basis_l, spherical_harmonics_l in enumerate(zip(radial_basis, spherical_harmonics)):
+            vector_expansion_l = radial_basis_l.unsqueeze(dim = 1) * spherical_harmonics_l.unsqueeze(dim = 2)
+            n_max_l = vector_expansion_l.shape[2]
+            vector_expansion_blocks.append(
+                TensorBlock(
+                    values = vector_expansion_l,
+                    samples = cartesian_vectors.samples,
+                    components = [Labels(
+                        names = ("m",),
+                        values = np.arange(-l, l+1, dtype=np.int32).reshape(2*l+1, 1)
+                    )],
+                    properties = Labels(
+                        names = ("n",),
+                        values = np.arange(0, n_max_l+1, dtype=np.int32).reshape(n_max_l, 1)
+                    )
+                )   
+            )
 
+        l_max = len(vector_expansion_blocks) - 1
+        vector_expansion_tmap = TensorMap(
+            keys = Labels(
+                names = ("l",),
+                values = np.arange(0, l_max+1, dtype=np.int32).reshape(l_max+1, 1),
+            ),
+        )
+
+        return vector_expansion_tmap
 
 
 def get_cartesian_vectors(structures, cutoff_radius):

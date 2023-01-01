@@ -30,7 +30,7 @@ class RadialBasis(torch.nn.Module):
                 # Need normalization...
                 R_nl = SphericalBesselFirstKind.apply(
                     l, 
-                    self.spherical_bessel_zeros[n, l] * x / self.a
+                    self.spherical_bessel_zeros[n, l] * x / self.a  # Careful: needs to be n, 0 if using naive Bessel basis
                 )
                 l_block.append(R_nl)
             radial_basis.append(torch.stack(l_block, dim = -1))
