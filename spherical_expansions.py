@@ -3,7 +3,7 @@ import torch
 import ase
 from equistore import TensorMap, Labels, TensorBlock
 
-# from spherical_harmonics import SphericalHarmonics  #This will only contain l_max... torch autograd function
+from angular_basis import AngularBasis
 from radial_basis import RadialBasis
 
 
@@ -26,7 +26,7 @@ class VectorExpansion(torch.nn.Module):
         super().__init__()
 
         self.hypers = hypers
-        # self.spherical_harmonics = SphericalHarmonics(hypers["l_max"])
+        self.spherical_harmonics_calculator = AngularBasis(hypers["lmax"])
         self.radial_basis_calculator = RadialBasis(hypers["radial basis"])
 
         # self.mlps = ...  # One for each l?
@@ -52,7 +52,7 @@ class VectorExpansion(torch.nn.Module):
 
         # Use broadcasting semantics to get the products in equistore shape
         vector_expansion_blocks = []
-        for l, radial_basis_l, spherical_harmonics_l in enumerate(zip(radial_basis, spherical_harmonics)):
+        for l, (radial_basis_l, spherical_harmonics_l) in enumerate(zip(radial_basis, spherical_harmonics)):
             vector_expansion_l = radial_basis_l.unsqueeze(dim = 1) * spherical_harmonics_l.unsqueeze(dim = 2)
             n_max_l = vector_expansion_l.shape[2]
             vector_expansion_blocks.append(
@@ -65,7 +65,7 @@ class VectorExpansion(torch.nn.Module):
                     )],
                     properties = Labels(
                         names = ("n",),
-                        values = np.arange(0, n_max_l+1, dtype=np.int32).reshape(n_max_l, 1)
+                        values = np.arange(0, n_max_l, dtype=np.int32).reshape(n_max_l, 1)
                     )
                 )   
             )
@@ -76,6 +76,7 @@ class VectorExpansion(torch.nn.Module):
                 names = ("l",),
                 values = np.arange(0, l_max+1, dtype=np.int32).reshape(l_max+1, 1),
             ),
+            blocks = vector_expansion_blocks
         )
 
         return vector_expansion_tmap

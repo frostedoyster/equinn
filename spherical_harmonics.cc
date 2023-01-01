@@ -63,19 +63,19 @@ void _spherical_harmonics_forward(
         for (int l=0; l<=l_max; l++) {
             for (int m=-l; m<=l; m++) {
                 if (m > 0) {
-                    output[l][index*(2*l+1)+m+l] =
+                    output_ptrs[l][index*(2*l+1)+m+l] =
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l-m)/factorial(l+m))
                         * plm[l][m]
                         * std::cos(m*ph);
                 } else if (m < 0) {
-                    output[l][index*(2*l+1)+m+l] =
+                    output_ptrs[l][index*(2*l+1)+m+l] =
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l+m)/factorial(l-m))
                         * plm[l][-m]
                         * std::sin(-m*ph);
                 } else {  // m == 0
-                    output[l][index*(2*l+1)+m+l] = 
+                    output_ptrs[l][index*(2*l+1)+m+l] = 
                         std::sqrt((2*l+1)/(4*M_PI))
                         * plm[l][m];
                 }
