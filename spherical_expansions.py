@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import ase
+from ase.neighborlist import primitive_neighbor_list
 from equistore import TensorMap, Labels, TensorBlock
 
 from angular_basis import AngularBasis
@@ -35,7 +36,7 @@ class SphericalExpansion(torch.nn.Module):
         aj_shifts = np.array([species_to_index[aj_index] for aj_index in aj_metadata])
         density_indices = torch.LongTensor(s_i_metadata_to_unique*n_species+aj_shifts)
 
-        l_max = self.hypers["lmax"]
+        l_max = self.hypers["l_max"]
         n_centers = len(unique_s_i_indices)
         densities = []
         for l in range(l_max+1):
@@ -46,14 +47,41 @@ class SphericalExpansion(torch.nn.Module):
             densities.append(densities_l)
 
         ai_new_indices = torch.tensor(ai_metadata[s_i_unique_to_metadata])
+        labels = []
         blocks = []
         for l in range(l_max+1):
             densities_l = densities[l]
             for a_i in self.all_species:
                 where_ai = np.where(ai_new_indices == a_i)[0]
                 densities_ai_l = densities_l[where_ai]
+                labels.append([a_i, l])
+                blocks.append(
+                    TensorBlock(
+                        values = densities_ai_l,
+                        samples = Labels(
+                            names = ["structure", "center"],
+                            values = unique_s_i_indices[where_ai]
+                        ),
+                        components = expanded_vectors.block(l=l).components,
+                        properties = Labels(
+                            names = ["a", "n"],
+                            values = np.concatenate(
+                                [np.stack([a_j*np.ones_like(expanded_vectors.block(l=l).properties["n"]), expanded_vectors.block(l=l).properties["n"]], axis=1) for a_j in self.all_species],
+                                axis = 0
+                            )
+                        )
+                    )
+                )
 
-        return 0
+        spherical_expansion = TensorMap(
+            keys = Labels(
+                names = ["a_i", "l"],
+                values = np.array(labels)
+            ),
+            blocks = blocks
+        )
+
+        return spherical_expansion
 
 
 class VectorExpansion(torch.nn.Module):
@@ -62,7 +90,7 @@ class VectorExpansion(torch.nn.Module):
         super().__init__()
 
         self.hypers = hypers
-        self.spherical_harmonics_calculator = AngularBasis(hypers["lmax"])
+        self.spherical_harmonics_calculator = AngularBasis(hypers["l_max"])
         self.radial_basis_calculator = RadialBasis(hypers["radial basis"])
 
         # self.mlps = ...  # One for each l?

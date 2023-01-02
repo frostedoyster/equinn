@@ -43,15 +43,19 @@ def run_fit(parameters):
     train_structures, test_structures = get_dataset_slices(DATASET_PATH, train_slice, test_slice)
 
     structures = train_structures[:1000]
+
+    n_max = [6, 5, 4, 3]
+    l_max = len(n_max) - 1
+
     hypers = {
         "cutoff radius": r_cut,
         "radial basis": {
             "cutoff radius": r_cut,
-            "mode": "single bessel",
-            "lmax": 3,
-            "nmax": 8
+            "mode": "full bessel",
+            "l_max": l_max,
+            "n_max": n_max
         },
-        "lmax": 3
+        "l_max": l_max
     }
 
     all_species = np.sort(np.unique(np.concatenate([train_structure.numbers for train_structure in train_structures] + [test_structure.numbers for test_structure in test_structures])))

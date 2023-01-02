@@ -1,14 +1,22 @@
 import numpy as np
+import scipy
+import torch
 from scipy import arange, pi, sqrt, zeros
 from scipy.special import jv
 from scipy.optimize import brentq
+from scipy.integrate import quadrature
 
-def get_laplacian_eigenvalues(n_big, l_big):
 
-    z_ln = Jn_zeros(l_big, n_big)
-    z_nl = z_ln.T
+def get_LE_normalization_factors(f, a, n_max, l_max, z_nl):
 
-    return z_nl**2
+    N_nl = np.zeros((n_max, l_max+1))
+
+    for l in range(l_max+1):
+        for n in range(n_max):
+            integral, _ = scipy.integrate.quadrature(lambda x: (f(l, torch.tensor(x))**2).numpy() * x**2, 0.0, z_nl[n, l], maxiter=100)
+            N_nl[n, l] = (1.0/z_nl[n, l]**3 * integral)**(-0.5) * a**(-1.5)
+
+    return N_nl
 
 
 def get_spherical_bessel_zeros(n_big, l_big):
