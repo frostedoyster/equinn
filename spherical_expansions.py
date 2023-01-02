@@ -14,9 +14,45 @@ class SphericalExpansion(torch.nn.Module):
 
         self.hypers = hypers
         self.all_species = all_species
-        self.vector_expansion = VectorExpansion(hypers)
+        self.vector_expansion_calculator = VectorExpansion(hypers)
 
     def forward(self, structures):
+        
+        expanded_vectors = self.vector_expansion_calculator(structures)
+        samples_metadata = expanded_vectors.block(l=0).samples
+
+        s_metadata = samples_metadata["structure"]
+        i_metadata = samples_metadata["center"]
+        ai_metadata = samples_metadata["species_center"]
+        aj_metadata = samples_metadata["species_neighbor"]
+
+        n_species = len(self.all_species)
+        species_to_index = {atomic_number : i_species for i_species, atomic_number in enumerate(self.all_species)}
+
+        s_i_metadata = np.stack([s_metadata, i_metadata], axis=-1)
+        unique_s_i_indices, s_i_unique_to_metadata, s_i_metadata_to_unique = np.unique(s_i_metadata, axis=0, return_index=True, return_inverse=True)
+
+        aj_shifts = np.array([species_to_index[aj_index] for aj_index in aj_metadata])
+        density_indices = torch.LongTensor(s_i_metadata_to_unique*n_species+aj_shifts)
+
+        l_max = self.hypers["lmax"]
+        n_centers = len(unique_s_i_indices)
+        densities = []
+        for l in range(l_max+1):
+            expanded_vectors_l = expanded_vectors.block(l=l).values
+            densities_l = torch.zeros(n_centers*n_species, expanded_vectors_l.shape[1], expanded_vectors_l.shape[2])
+            densities_l.index_add_(dim=0, index=density_indices, source=expanded_vectors_l)
+            densities_l = densities_l.reshape((n_centers, n_species, 2*l+1, -1)).swapaxes(1, 2).reshape((n_centers, 2*l+1, -1))
+            densities.append(densities_l)
+
+        ai_new_indices = torch.tensor(ai_metadata[s_i_unique_to_metadata])
+        blocks = []
+        for l in range(l_max+1):
+            densities_l = densities[l]
+            for a_i in self.all_species:
+                where_ai = np.where(ai_new_indices == a_i)[0]
+                densities_ai_l = densities_l[where_ai]
+
         return 0
 
 

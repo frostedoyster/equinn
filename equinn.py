@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import ase
 from dataset import get_dataset_slices
-from spherical_expansions import VectorExpansion
+from spherical_expansions import VectorExpansion, SphericalExpansion
 
 def run_fit(parameters):
 
@@ -54,8 +54,16 @@ def run_fit(parameters):
         "lmax": 3
     }
 
+    all_species = np.sort(np.unique(np.concatenate([train_structure.numbers for train_structure in train_structures] + [test_structure.numbers for test_structure in test_structures])))
+    print(f"All species: {all_species}")
+
+    print("Testing vector expansion")
     vector_expansion_calculator = VectorExpansion(hypers)
     tmap = vector_expansion_calculator(structures)
+
+    print("Testing spherical expansion")
+    spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
+    tmap = spherical_expansion_calculator(structures)
 
     
     
