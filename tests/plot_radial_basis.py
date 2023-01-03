@@ -1,7 +1,7 @@
 import numpy as np
 import ase
-from spherical_expansions import SphericalExpansion
-from structures import Structures
+from equinn.spherical_expansions import SphericalExpansion
+from equinn.structures import Structures
 
 def get_dummy_structures(r_array):
     dummy_structures = []

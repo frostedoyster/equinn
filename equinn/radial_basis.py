@@ -1,6 +1,6 @@
 import torch
 import spherical_bessel
-from spherical_bessel_utils import get_spherical_bessel_zeros, get_LE_normalization_factors
+from .spherical_bessel_utils import get_spherical_bessel_zeros, get_LE_normalization_factors
 
 
 class RadialBasis(torch.nn.Module):

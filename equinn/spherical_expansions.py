@@ -4,8 +4,8 @@ import ase
 from ase.neighborlist import primitive_neighbor_list
 from equistore import TensorMap, Labels, TensorBlock
 
-from angular_basis import AngularBasis
-from radial_basis import RadialBasis
+from .angular_basis import AngularBasis
+from .radial_basis import RadialBasis
 
 
 class SphericalExpansion(torch.nn.Module):
