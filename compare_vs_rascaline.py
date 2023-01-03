@@ -9,6 +9,12 @@ from spherical_bessel_utils import Jn_zeros
 from equistore import Labels
 from spherical_expansions import SphericalExpansion
 
+
+##############################
+# TODO: YOU NEED A TEST ON STRUCTURES WITH PBCS
+##############################
+
+
 torch.set_default_dtype(torch.float64)
 
 a = 6.0

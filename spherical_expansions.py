@@ -154,16 +154,21 @@ def get_cartesian_vectors(structures, cutoff_radius):
     for structure_index, structure in enumerate(structures):
         centers, neighbors, unit_cell_shift_vectors = get_neighbor_list(structure, cutoff_radius) 
         positions = torch.tensor(structure.positions, dtype=torch.get_default_dtype())
-        cell = structure.cell
+        cell = torch.tensor(np.array(structure.cell), dtype=torch.get_default_dtype())
         species = structure.get_atomic_numbers()
 
-        for center, neighbor, unit_cell_shift_vector in zip(centers, neighbors, unit_cell_shift_vectors):
-            vector = positions[neighbor] - positions[center] + torch.tensor(unit_cell_shift_vector.dot(cell), dtype=torch.get_default_dtype())
+        structure_vectors = positions[neighbors] - positions[centers] + unit_cell_shift_vectors @ cell  # Warning: it works but in a weird way when there is no cell
+        vectors.append(structure_vectors)
+        labels.append(
+            np.stack([
+            np.array([structure_index]*len(centers)), 
+            centers.numpy(), 
+            neighbors.numpy(), 
+            species[centers], 
+            species[neighbors]], axis=-1))
 
-            vectors.append(vector)
-            labels.append([structure_index, center, neighbor, species[center], species[neighbor]])
-
-    vectors = torch.stack(vectors)
+    vectors = torch.cat(vectors, dim=0)
+    labels = np.concatenate(labels, axis=0)
     
     block = TensorBlock(
         values = vectors.unsqueeze(dim=-1),
@@ -204,5 +209,6 @@ def get_neighbor_list(structure, cutoff_radius):
 
     centers = torch.LongTensor(centers)
     neighbors = torch.LongTensor(neighbors)
+    unit_cell_shift_vectors = torch.tensor(unit_cell_shift_vectors, dtype=torch.get_default_dtype())
 
     return centers, neighbors, unit_cell_shift_vectors

@@ -42,9 +42,7 @@ def run_fit(parameters):
     
     train_structures, test_structures = get_dataset_slices(DATASET_PATH, train_slice, test_slice)
 
-    structures = train_structures[:1000]
-
-    n_max = [6, 5, 4, 3]
+    n_max = [12, 5, 4, 3]
     l_max = len(n_max) - 1
 
     hypers = {
@@ -63,12 +61,57 @@ def run_fit(parameters):
 
     print("Testing vector expansion")
     vector_expansion_calculator = VectorExpansion(hypers)
-    tmap = vector_expansion_calculator(structures)
+    tmap = vector_expansion_calculator(train_structures[:1000])
 
     print("Testing spherical expansion")
     spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
-    tmap = spherical_expansion_calculator(structures)
+    tmap = spherical_expansion_calculator(train_structures[:1000])
 
+    class Model(torch.nn.Module):
+
+        def __init__(self, hypers, n_feat, all_species) -> None:
+            super().__init__()
+            self.all_species = all_species
+            self.spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
+            self.linear = torch.nn.ModuleDict({
+                str(a_i): torch.nn.Linear(n_feat, 1) for a_i in self.all_species
+            })
+
+        def forward(self, structures):
+            spherical_expansion = self.spherical_expansion_calculator(structures)
+            atomic_energies = []
+            structure_indices = []
+            for a_i in self.all_species:
+                block = spherical_expansion.block(a_i=a_i, l=0)
+                features = block.values.squeeze(dim=1)
+                structure_indices.append(block.samples["structure"])
+                atomic_energies.append(
+                    self.linear[str(a_i)](features).squeeze(dim=-1)
+                )
+            atomic_energies = torch.concat(atomic_energies)
+            structure_indices = torch.LongTensor(np.concatenate(structure_indices))
+            energies = torch.zeros((len(structures),))
+            energies.index_add_(dim=0, index=structure_indices, source=atomic_energies)
+
+            return energies
+
+    model = Model(hypers, n_max[0]*len(all_species), all_species)
+    data_loader = torch.utils.data.DataLoader(train_structures, batch_size=10, shuffle=True, collate_fn=(lambda x: x))
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-1) 
+
+    avg = torch.mean(torch.tensor([structure.info["energy"] for structure in train_structures])*627.5)
+
+    for epoch in range(100):
+        total_loss = 0.0
+        for batch in data_loader:
+            optimizer.zero_grad()
+            predicted_energies = model(batch)
+            energies = torch.tensor([structure.info["energy"] for structure in batch])*627.5 - avg
+            loss = torch.sum((energies-predicted_energies)**2)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(np.sqrt(total_loss/n_train))
     
     
 
