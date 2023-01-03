@@ -151,11 +151,19 @@ def get_cartesian_vectors(structures, cutoff_radius):
     labels = []
     vectors = []
 
-    for structure_index, structure in enumerate(structures):
-        centers, neighbors, unit_cell_shift_vectors = get_neighbor_list(structure, cutoff_radius) 
-        positions = torch.tensor(structure.positions, dtype=torch.get_default_dtype())
-        cell = torch.tensor(np.array(structure.cell), dtype=torch.get_default_dtype())
-        species = structure.get_atomic_numbers()
+    for structure_index in range(structures.n_structures):
+
+        where_selected_structure = np.where(structures.structure_indices == structure_index)[0]
+
+        centers, neighbors, unit_cell_shift_vectors = get_neighbor_list(
+            structures.positions.detach().clone().numpy()[where_selected_structure], 
+            structures.pbcs[structure_index], 
+            structures.cells[structure_index], 
+            cutoff_radius) 
+        
+        positions = structures.positions[torch.LongTensor(where_selected_structure)]
+        cell = torch.tensor(np.array(structures.cells[structure_index]), dtype=torch.get_default_dtype())
+        species = structures.atomic_species[structure_index]
 
         structure_vectors = positions[neighbors] - positions[centers] + unit_cell_shift_vectors @ cell  # Warning: it works but in a weird way when there is no cell
         vectors.append(structure_vectors)
@@ -188,13 +196,13 @@ def get_cartesian_vectors(structures, cutoff_radius):
     return block 
 
 
-def get_neighbor_list(structure, cutoff_radius):
+def get_neighbor_list(positions, pbc, cell, cutoff_radius):
 
     centers, neighbors, unit_cell_shift_vectors = ase.neighborlist.primitive_neighbor_list(
         quantities="ijS",
-        pbc=structure.pbc,
-        cell=structure.cell,
-        positions=structure.positions,
+        pbc=pbc,
+        cell=cell,
+        positions=positions,
         cutoff=cutoff_radius,
         self_interaction=True,
         use_scaled_positions=False,

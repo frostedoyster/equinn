@@ -5,6 +5,8 @@ import torch
 import ase
 from dataset import get_dataset_slices
 from spherical_expansions import VectorExpansion, SphericalExpansion
+from forces import compute_forces
+from structures import Structures
 
 def run_fit(parameters):
 
@@ -61,23 +63,29 @@ def run_fit(parameters):
 
     print("Testing vector expansion")
     vector_expansion_calculator = VectorExpansion(hypers)
-    tmap = vector_expansion_calculator(train_structures[:1000])
+    tmap = vector_expansion_calculator(Structures(train_structures[:1000]))
 
     print("Testing spherical expansion")
     spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
-    tmap = spherical_expansion_calculator(train_structures[:1000])
+    tmap = spherical_expansion_calculator(Structures(train_structures[:1000]))
 
     class Model(torch.nn.Module):
 
-        def __init__(self, hypers, n_feat, all_species) -> None:
+        def __init__(self, hypers, n_feat, all_species, do_forces) -> None:
             super().__init__()
             self.all_species = all_species
             self.spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
             self.linear = torch.nn.ModuleDict({
                 str(a_i): torch.nn.Linear(n_feat, 1) for a_i in self.all_species
             })
+            self.do_forces = do_forces
 
         def forward(self, structures):
+
+            structures = Structures(structures)
+            if self.do_forces:
+                structures.positions.requires_grad = True
+
             spherical_expansion = self.spherical_expansion_calculator(structures)
             atomic_energies = []
             structure_indices = []
@@ -93,9 +101,14 @@ def run_fit(parameters):
             energies = torch.zeros((len(structures),))
             energies.index_add_(dim=0, index=structure_indices, source=atomic_energies)
 
-            return energies
+            if self.do_forces:
+                forces = compute_forces(energies, structures.positions, True)
+            else:
+                forces = None  # Or zero-dimensional tensor?
 
-    model = Model(hypers, n_max[0]*len(all_species), all_species)
+            return energies, forces
+
+    model = Model(hypers, n_max[0]*len(all_species), all_species, do_forces=True)
     data_loader = torch.utils.data.DataLoader(train_structures, batch_size=10, shuffle=True, collate_fn=(lambda x: x))
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-1) 
 
