@@ -87,8 +87,8 @@ torch::Tensor spherical_bessel_first_kind_backward(
 
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("first_kind_forward", &spherical_bessel_first_kind_forward, "spherical Bessel first kind (forward)");
-  m.def("first_kind_backward", &spherical_bessel_first_kind_backward, "spherical Bessel first kind (backward)");
+    m.def("first_kind_forward", &spherical_bessel_first_kind_forward, "spherical Bessel first kind (forward)");
+    m.def("first_kind_backward", &spherical_bessel_first_kind_backward, "spherical Bessel first kind (backward)");
 }
 
 

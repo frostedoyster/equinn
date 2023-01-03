@@ -56,10 +56,10 @@ class SphericalBesselFirstKind(torch.autograd.Function):
         return output
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, d_loss_d_output):
 
         l = ctx.l
         x, = ctx.saved_tensors
-        derivatives = spherical_bessel.first_kind_backward(l, x)
+        d_output_d_x = spherical_bessel.first_kind_backward(l, x)
 
-        return None, grad_output * derivatives
+        return None, d_loss_d_output * d_output_d_x

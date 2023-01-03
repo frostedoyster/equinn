@@ -8,8 +8,11 @@ from equinn.forces import compute_forces
 from equinn.structures import Structures
 from equinn.error_measures import get_mae, get_rmse, get_sse
 from equinn.conversions import get_conversions
+from equinn.power_spectrum import PowerSpectrum
 
 def run_fit(**parameters):
+
+    torch.set_default_dtype(torch.float64)
 
     # Unpack options
     random_seed = parameters["random seed"]
@@ -67,18 +70,26 @@ def run_fit(**parameters):
             super().__init__()
             self.all_species = all_species
             self.spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
-            self.linear = torch.nn.ModuleDict({
-                str(a_i): torch.nn.Linear(n_feat, 1) for a_i in self.all_species
+            self.power_spectrum_calculator = PowerSpectrum(all_species)
+            self.spherical_expansion_model = torch.nn.ModuleDict({
+                str(a_i): torch.nn.Linear(n_feat[0], 1) for a_i in self.all_species
+            })
+            self.power_spectrum_model = torch.nn.ModuleDict({
+                str(a_i): torch.nn.Linear(n_feat[1], 1) for a_i in self.all_species
             })
             self.do_forces = do_forces
 
         def forward(self, structures):
 
             structures = Structures(structures)
+            energies = torch.zeros((structures.n_structures,))
+
             if self.do_forces:
                 structures.positions.requires_grad = True
 
             spherical_expansion = self.spherical_expansion_calculator(structures)
+            power_spectrum = self.power_spectrum_calculator(spherical_expansion, spherical_expansion)
+
             atomic_energies = []
             structure_indices = []
             for a_i in self.all_species:
@@ -86,12 +97,23 @@ def run_fit(**parameters):
                 features = block.values.squeeze(dim=1)
                 structure_indices.append(block.samples["structure"])
                 atomic_energies.append(
-                    self.linear[str(a_i)](features).squeeze(dim=-1)
+                    self.spherical_expansion_model[str(a_i)](features).squeeze(dim=-1)
                 )
-            atomic_energies = torch.concat(atomic_energies)
+            atomic_energies_rs = torch.concat(atomic_energies)
             structure_indices = torch.LongTensor(np.concatenate(structure_indices))
-            energies = torch.zeros((structures.n_structures,))
-            energies.index_add_(dim=0, index=structure_indices, source=atomic_energies)
+            
+            energies.index_add_(dim=0, index=structure_indices, source=atomic_energies_rs)
+
+            atomic_energies = []
+            for a_i in self.all_species:
+                block = power_spectrum.block(a_i=a_i)
+                features = block.values.squeeze(dim=1)
+                atomic_energies.append(
+                    self.power_spectrum_model[str(a_i)](features).squeeze(dim=-1)
+                )
+            
+            atomic_energies_ps = torch.concat(atomic_energies)
+            energies.index_add_(dim=0, index=structure_indices, source=atomic_energies_ps)
 
             if self.do_forces:
                 forces = compute_forces(energies, structures.positions, True)
@@ -100,8 +122,11 @@ def run_fit(**parameters):
 
             return energies, forces
 
-
-    model = Model(hypers, n_max[0]*len(all_species), all_species, do_forces=do_forces)
+    n_feat = [
+        n_max[0]*len(all_species),
+        sum([n_max[l]**2 * len(all_species)**2 for l in range(l_max+1)])
+    ]
+    model = Model(hypers, n_feat, all_species, do_forces=do_forces)
     print(model)
     data_loader = torch.utils.data.DataLoader(train_structures, batch_size=10, shuffle=True, collate_fn=(lambda x: x))
     optimizer = torch.optim.Adam(model.parameters(), lr=1e0) 

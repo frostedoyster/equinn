@@ -64,9 +64,13 @@ class SphericalExpansion(torch.nn.Module):
                         ),
                         components = expanded_vectors.block(l=l).components,
                         properties = Labels(
-                            names = ["a", "n"],
+                            names = ["a1", "n1", "l1"],
                             values = np.concatenate(
-                                [np.stack([a_j*np.ones_like(expanded_vectors.block(l=l).properties["n"]), expanded_vectors.block(l=l).properties["n"]], axis=1) for a_j in self.all_species],
+                                [np.stack([
+                                    a_j*np.ones_like(expanded_vectors.block(l=l).properties["n"]), 
+                                    expanded_vectors.block(l=l).properties["n"],
+                                    l*np.ones_like(expanded_vectors.block(l=l).properties["n"])
+                                ], axis=1) for a_j in self.all_species],
                                 axis = 0
                             )
                         )
@@ -108,11 +112,13 @@ class VectorExpansion(torch.nn.Module):
         )
 
         radial_basis = self.radial_basis_calculator(r)
+        #print(radial_basis[1].requires_grad)
 
         cos_theta = bare_cartesian_vectors[:, 2]/r
         phi = torch.atan2(bare_cartesian_vectors[:, 1], bare_cartesian_vectors[:, 0])
 
         spherical_harmonics = self.spherical_harmonics_calculator(cos_theta, phi)
+        #print(spherical_harmonics[1].requires_grad)
 
         # Use broadcasting semantics to get the products in equistore shape
         vector_expansion_blocks = []
