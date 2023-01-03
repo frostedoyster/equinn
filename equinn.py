@@ -98,7 +98,7 @@ def run_fit(parameters):
                 )
             atomic_energies = torch.concat(atomic_energies)
             structure_indices = torch.LongTensor(np.concatenate(structure_indices))
-            energies = torch.zeros((len(structures),))
+            energies = torch.zeros((structures.n_structures,))
             energies.index_add_(dim=0, index=structure_indices, source=atomic_energies)
 
             if self.do_forces:
@@ -109,22 +109,31 @@ def run_fit(parameters):
             return energies, forces
 
     model = Model(hypers, n_max[0]*len(all_species), all_species, do_forces=True)
+    print(model)
     data_loader = torch.utils.data.DataLoader(train_structures, batch_size=10, shuffle=True, collate_fn=(lambda x: x))
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-1) 
 
     avg = torch.mean(torch.tensor([structure.info["energy"] for structure in train_structures])*627.5)
 
-    for epoch in range(100):
+    for epoch in range(1000):
         total_loss = 0.0
         for batch in data_loader:
             optimizer.zero_grad()
-            predicted_energies = model(batch)
+            predicted_energies, predicted_forces = model(batch)
+            #print(predicted_forces.shape)
             energies = torch.tensor([structure.info["energy"] for structure in batch])*627.5 - avg
-            loss = torch.sum((energies-predicted_energies)**2)
+            #print(np.concatenate([structure.get_forces() for structure in batch], axis=0))
+            forces = torch.tensor(np.concatenate([structure.get_forces() for structure in batch], axis=0))*conversions["METHANE_FORCE"]
+            #print(forces.shape)
+            loss = torch.sum((energies-predicted_energies)**2) + torch.sum((forces-predicted_forces)**2)
+            # loss = torch.sum((energies-predicted_energies)**2)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
-        print(np.sqrt(total_loss/n_train))
+            total_loss += torch.sum((energies-predicted_energies)**2).item()
+
+        predicted_energies, _ = model(test_structures)
+        energies = torch.tensor([structure.info["energy"] for structure in test_structures])*627.5 - avg
+        print(np.sqrt(total_loss/n_train), np.sqrt(torch.sum((energies-predicted_energies)**2).item()/n_test))
     
     
 

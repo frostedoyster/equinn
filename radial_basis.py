@@ -51,10 +51,15 @@ class SphericalBesselFirstKind(torch.autograd.Function):
         assert(x.is_cpu)
         assert(x.is_contiguous())
         output = spherical_bessel.first_kind_forward(l, x)
-        ctx.save_for_backward(*[l, x])
+        ctx.l = l
+        ctx.save_for_backward(x)
         return output
 
     @staticmethod
     def backward(ctx, grad_output):
-        # TODO
-        raise NotImplementedError
+
+        l = ctx.l
+        x, = ctx.saved_tensors
+        derivatives = spherical_bessel.first_kind_backward(l, x)
+
+        return None, grad_output * derivatives

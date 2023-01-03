@@ -28,7 +28,8 @@ class SphericalHarmonics(torch.autograd.Function):
         assert(cos_theta.shape == phi.shape)
         
         output = spherical_harmonics.forward(l_max, cos_theta, phi)
-        ctx.save_for_backward(*[l_max, cos_theta, phi])
+        ctx.l_max = l_max
+        ctx.save_for_backward(*[cos_theta, phi])
         return output
 
     @staticmethod

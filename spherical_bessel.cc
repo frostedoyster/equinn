@@ -45,19 +45,51 @@ torch::Tensor spherical_bessel_first_kind_forward(
 }
 
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("first_kind_forward", &spherical_bessel_first_kind_forward, "spherical Bessel first kind (forward)");
+template<typename scalar_t>
+void _spherical_bessel_first_kind_backward(
+    int l,
+    torch::Tensor x,
+    torch::Tensor derivatives
+    ) {
+
+    std::size_t total_size = 1;
+    for (const auto &size : x.sizes()) {
+        total_size *= size;
+    }
+    
+    scalar_t* x_ptr = x.data_ptr<scalar_t>();
+    scalar_t* derivatives_ptr = derivatives.data_ptr<scalar_t>();
+
+    for (std::size_t index = 0; index < total_size; index++) {
+        derivatives_ptr[index] = (l/x_ptr[index]) * std::sph_bessel(l, x_ptr[index]) - std::sph_bessel(l+1, x_ptr[index]);
+    }
+
 }
 
 
+torch::Tensor spherical_bessel_first_kind_backward(
+    int l,
+    torch::Tensor x
+) {
+
+    auto derivatives = torch::empty_like(x);
+
+    AT_DISPATCH_FLOATING_TYPES(x.type(), "spherical_bessel_first_kind_backward", ([&] {
+        _spherical_bessel_first_kind_backward<scalar_t>(
+            l,
+            x, 
+            derivatives
+        );
+    }));
+
+    return derivatives;
+}
 
 
-
-
-
-
-
-
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+  m.def("first_kind_forward", &spherical_bessel_first_kind_forward, "spherical Bessel first kind (forward)");
+  m.def("first_kind_backward", &spherical_bessel_first_kind_backward, "spherical Bessel first kind (backward)");
+}
 
 
 

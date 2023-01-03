@@ -8,6 +8,7 @@ rascaline._c_lib._get_library()
 from spherical_bessel_utils import Jn_zeros
 from equistore import Labels
 from spherical_expansions import SphericalExpansion
+from structures import Structures
 
 
 ##############################
@@ -34,7 +35,7 @@ hypers_equinn = {
     "l_max": l_max
 }
 calculator = SphericalExpansion(hypers_equinn, [1, 6])
-spherical_expansion_coefficients_equinn = calculator(structures)
+spherical_expansion_coefficients_equinn = calculator(Structures(structures))
 
 def write_spline(a, n_max, l_max, path):
 

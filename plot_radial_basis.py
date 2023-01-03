@@ -1,6 +1,7 @@
 import numpy as np
 import ase
 from spherical_expansions import SphericalExpansion
+from structures import Structures
 
 def get_dummy_structures(r_array):
     dummy_structures = []
@@ -29,7 +30,7 @@ hypers_spherical_expansion = {
     }
 
 calculator = SphericalExpansion(hypers_spherical_expansion, [1, 6])
-spherical_expansion_coefficients = calculator(structures)
+spherical_expansion_coefficients = calculator(Structures(structures))
 
 block_C_0 = spherical_expansion_coefficients.block(a_i = 6, l = 0)
 print("Block shape is", block_C_0.values.shape)
