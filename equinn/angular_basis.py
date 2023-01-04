@@ -52,16 +52,4 @@ class SphericalHarmonics(torch.autograd.Function):
             dim = 1
         )
 
-        #if torch.any(cos_theta > 0.9999):  # Careful also when it's close to -1
-            #print("NAN TIME")
-            #print(d_loss_d_cos_theta[torch.where(cos_theta > 0.9999)])
-        #d_loss_d_cos_theta[torch.where(cos_theta > 0.99)] = 0.0
-        #d_loss_d_cos_theta[torch.where(cos_theta < -0.99)] = 0.0
-        """
-        if torch.any(cos_theta > 0.9999):
-            print(d_loss_d_phi[torch.where(cos_theta > 0.9999)])
-        if torch.any(cos_theta < -0.9999):
-            print(d_loss_d_phi[torch.where(cos_theta < -0.9999)])
-        """
-
         return None, d_loss_d_cos_theta, d_loss_d_phi

@@ -112,13 +112,11 @@ class VectorExpansion(torch.nn.Module):
         )
 
         radial_basis = self.radial_basis_calculator(r)
-        #print(radial_basis[1].requires_grad)
-
+        
         cos_theta = bare_cartesian_vectors[:, 2]/r
         phi = torch.atan2(bare_cartesian_vectors[:, 1], bare_cartesian_vectors[:, 0])
 
         spherical_harmonics = self.spherical_harmonics_calculator(cos_theta, phi)
-        #print(spherical_harmonics[1].requires_grad)
 
         # Use broadcasting semantics to get the products in equistore shape
         vector_expansion_blocks = []

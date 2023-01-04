@@ -51,9 +51,10 @@ std::vector<std::vector<scalar_t>> associated_legendre_polynomial_derivatives(in
     // Iterate over the degree of the polynomial
     for (int l = 1; l <= l_max; l++) {
         // Iterate over the orders
-        for (int m = 0; m <= l; m++) {
+        for (int m = 0; m <= l-1; m++) {
             dPlm_dx[l][m] = (x*l*p[l][m] - (m + l) * p[l-1][m]) / (x*x-1);
         }
+        dPlm_dx[l][l] = x*l*p[l][l] / (x*x-1);
     }
     
     // Return the derivatives
