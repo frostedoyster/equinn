@@ -1,5 +1,6 @@
 import torch
 import spherical_harmonics
+import warnings
 
 
 class AngularBasis(torch.nn.Module):
@@ -38,6 +39,13 @@ class SphericalHarmonics(torch.autograd.Function):
         l_max = ctx.l_max
         cos_theta, phi = ctx.saved_tensors
 
+        # Print a warning when the cartesian vector is very close to the z axis.
+        # This could trigger numerical instabilities in the backpropagation
+        # through the spherical harmonics:
+        if torch.any(cos_theta > 0.999999) or torch.any(cos_theta < -0.999999):
+            warnings.warn("A vector happens to be very close to the z axis. Numerical instabilities could ensue during backward pass.", category=UserWarning)
+            # Uncomment below to see the effects...
+
         d_output_d_cos_theta, d_output_d_phi = spherical_harmonics.backward(l_max, cos_theta, phi)
 
         d_loss_d_cos_theta = torch.sum(
@@ -51,5 +59,15 @@ class SphericalHarmonics(torch.autograd.Function):
             for d_loss_d_output_single_l, d_output_d_phi_single_l in zip(d_loss_d_output, d_output_d_phi)], dim = 1),
             dim = 1
         )
+
+        """
+        if torch.any(cos_theta > 0.999999):
+            where = torch.where(cos_theta > 0.999999)
+            print(d_loss_d_phi[where])  # Should be very small. Will be multiplied by very large dphi/dx and/or dphi/dy...
+        
+        if torch.any(cos_theta < -0.999999):
+            where = torch.where(cos_theta < -0.999999)
+            print(d_loss_d_phi[where])  # Should be very small. Will be multiplied by very large dphi/dx and/or dphi/dy...
+        """
 
         return None, d_loss_d_cos_theta, d_loss_d_phi

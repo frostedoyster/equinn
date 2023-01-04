@@ -46,18 +46,32 @@ def run_fit(**parameters):
     
     train_structures, test_structures = get_dataset_slices(dataset_path, train_slice, test_slice)
 
-    n_max = [12, 5, 4, 3]
+    n_max = [7, 6, 5, 4, 3, 2, 2, 1, 1]
     l_max = len(n_max) - 1
+    n_max_rs = [15]
 
     hypers = {
         "cutoff radius": r_cut,
         "radial basis": {
             "cutoff radius": r_cut,
             "mode": "full bessel",
+            "kind": "first",
             "l_max": l_max,
             "n_max": n_max
         },
         "l_max": l_max
+    }
+
+    hypers_rs = {
+        "cutoff radius": r_cut,
+        "radial basis": {
+            "cutoff radius": r_cut,
+            "mode": "full bessel",
+            "kind": "second",
+            "l_max": 0,
+            "n_max": n_max_rs
+        },
+        "l_max": 0
     }
 
     all_species = np.sort(np.unique(np.concatenate([train_structure.numbers for train_structure in train_structures] + [test_structure.numbers for test_structure in test_structures])))
@@ -66,12 +80,13 @@ def run_fit(**parameters):
 
     class Model(torch.nn.Module):
 
-        def __init__(self, hypers, n_feat, all_species, do_forces) -> None:
+        def __init__(self, hypers_rs, hypers, n_feat, all_species, do_forces) -> None:
             super().__init__()
             self.all_species = all_species
+            self.radial_spectrum_calculator = SphericalExpansion(hypers_rs, all_species)
             self.spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
             self.power_spectrum_calculator = PowerSpectrum(all_species)
-            self.spherical_expansion_model = torch.nn.ModuleDict({
+            self.radial_spectrum_model = torch.nn.ModuleDict({
                 str(a_i): torch.nn.Linear(n_feat[0], 1) for a_i in self.all_species
             })
             self.power_spectrum_model = torch.nn.ModuleDict({
@@ -87,17 +102,18 @@ def run_fit(**parameters):
             if self.do_forces:
                 structures.positions.requires_grad = True
 
+            radial_spectrum = self.radial_spectrum_calculator(structures)
             spherical_expansion = self.spherical_expansion_calculator(structures)
             power_spectrum = self.power_spectrum_calculator(spherical_expansion, spherical_expansion)
 
             atomic_energies = []
             structure_indices = []
             for a_i in self.all_species:
-                block = spherical_expansion.block(a_i=a_i, l=0)
+                block = radial_spectrum.block(a_i=a_i, l=0)
                 features = block.values.squeeze(dim=1)
                 structure_indices.append(block.samples["structure"])
                 atomic_energies.append(
-                    self.spherical_expansion_model[str(a_i)](features).squeeze(dim=-1)
+                    self.radial_spectrum_model[str(a_i)](features).squeeze(dim=-1)
                 )
             atomic_energies_rs = torch.concat(atomic_energies)
             structure_indices = torch.LongTensor(np.concatenate(structure_indices))
@@ -123,10 +139,10 @@ def run_fit(**parameters):
             return energies, forces
 
     n_feat = [
-        n_max[0]*len(all_species),
+        n_max_rs[0]*len(all_species),
         sum([n_max[l]**2 * len(all_species)**2 for l in range(l_max+1)])
     ]
-    model = Model(hypers, n_feat, all_species, do_forces=do_forces)
+    model = Model(hypers_rs, hypers, n_feat, all_species, do_forces=do_forces)
     print(model)
     data_loader = torch.utils.data.DataLoader(train_structures, batch_size=10, shuffle=True, collate_fn=(lambda x: x))
     optimizer = torch.optim.Adam(model.parameters(), lr=1e0) 

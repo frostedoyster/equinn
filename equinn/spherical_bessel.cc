@@ -86,15 +86,101 @@ torch::Tensor spherical_bessel_first_kind_backward(
 }
 
 
+template<typename scalar_t>
+void _spherical_bessel_second_kind_forward(
+    int l,
+    torch::Tensor x,
+    torch::Tensor output
+    ) {
+
+    std::size_t total_size = 1;
+    for (const auto &size : x.sizes()) {
+        total_size *= size;
+    }
+    
+    scalar_t* x_ptr = x.data_ptr<scalar_t>();
+    scalar_t* output_ptr = output.data_ptr<scalar_t>();
+
+    for (std::size_t index = 0; index < total_size; index++) {
+        output_ptr[index] = std::sph_neumann(l, x_ptr[index]);
+    }
+
+}
+
+
+torch::Tensor spherical_bessel_second_kind_forward(
+    int l,
+    torch::Tensor x
+) {
+
+    auto output = torch::empty_like(x);
+
+    AT_DISPATCH_FLOATING_TYPES(x.type(), "spherical_bessel_second_kind_forward", ([&] {
+        _spherical_bessel_second_kind_forward<scalar_t>(
+            l,
+            x, 
+            output
+        );
+    }));
+
+    return output;
+}
+
+
+template<typename scalar_t>
+void _spherical_bessel_second_kind_backward(
+    int l,
+    torch::Tensor x,
+    torch::Tensor derivatives
+    ) {
+
+    std::size_t total_size = 1;
+    for (const auto &size : x.sizes()) {
+        total_size *= size;
+    }
+    
+    scalar_t* x_ptr = x.data_ptr<scalar_t>();
+    scalar_t* derivatives_ptr = derivatives.data_ptr<scalar_t>();
+
+    for (std::size_t index = 0; index < total_size; index++) {
+        derivatives_ptr[index] = (l/x_ptr[index]) * std::sph_neumann(l, x_ptr[index]) - std::sph_neumann(l+1, x_ptr[index]);
+    }
+
+}
+
+
+torch::Tensor spherical_bessel_second_kind_backward(
+    int l,
+    torch::Tensor x
+) {
+
+    auto derivatives = torch::empty_like(x);
+
+    AT_DISPATCH_FLOATING_TYPES(x.type(), "spherical_bessel_second_kind_backward", ([&] {
+        _spherical_bessel_second_kind_backward<scalar_t>(
+            l,
+            x, 
+            derivatives
+        );
+    }));
+
+    return derivatives;
+}
+
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("first_kind_forward", &spherical_bessel_first_kind_forward, "spherical Bessel first kind (forward)");
     m.def("first_kind_backward", &spherical_bessel_first_kind_backward, "spherical Bessel first kind (backward)");
+    m.def("second_kind_forward", &spherical_bessel_second_kind_forward, "spherical Bessel second kind (forward)");
+    m.def("second_kind_backward", &spherical_bessel_second_kind_backward, "spherical Bessel second kind (backward)");
 }
 
 
 
 /*
 int main() {
+
+    // Also works for std::sph_neumann
 
     int l = 3;
     double x = 3.4;
