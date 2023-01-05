@@ -22,9 +22,7 @@ class SphericalHarmonics(torch.autograd.Function):
     def forward(ctx, l_max, cos_theta, phi):
 
         assert(cos_theta.is_cpu)
-        assert(cos_theta.is_contiguous())
         assert(phi.is_cpu)
-        assert(phi.is_contiguous())
         assert(len(cos_theta.shape) == 1)
         assert(cos_theta.shape == phi.shape)
 

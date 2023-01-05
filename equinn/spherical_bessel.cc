@@ -11,16 +11,14 @@ void _spherical_bessel_first_kind_forward(
     torch::Tensor output
     ) {
 
-    std::size_t total_size = 1;
-    for (const auto &size : x.sizes()) {
-        total_size *= size;
-    }
-    
-    scalar_t* x_ptr = x.data_ptr<scalar_t>();
-    scalar_t* output_ptr = output.data_ptr<scalar_t>();
+    int64_t size = x.sizes()[0];
 
-    for (std::size_t index = 0; index < total_size; index++) {
-        output_ptr[index] = std::sph_bessel(l, x_ptr[index]);
+    for (int64_t index = 0; index < size; index++) {
+        scalar_t x_item = x.index({index}).item<scalar_t>();
+        output.index_put_(
+            {index}, 
+            std::sph_bessel(l, x_item)
+        );
     }
 
 }
@@ -52,16 +50,14 @@ void _spherical_bessel_first_kind_backward(
     torch::Tensor derivatives
     ) {
 
-    std::size_t total_size = 1;
-    for (const auto &size : x.sizes()) {
-        total_size *= size;
-    }
-    
-    scalar_t* x_ptr = x.data_ptr<scalar_t>();
-    scalar_t* derivatives_ptr = derivatives.data_ptr<scalar_t>();
+    int64_t size = x.sizes()[0];
 
-    for (std::size_t index = 0; index < total_size; index++) {
-        derivatives_ptr[index] = (l/x_ptr[index]) * std::sph_bessel(l, x_ptr[index]) - std::sph_bessel(l+1, x_ptr[index]);
+    for (int64_t index = 0; index < size; index++) {
+        scalar_t x_item = x.index({index}).item<scalar_t>();
+        derivatives.index_put_(
+            {index}, 
+            l/x.index({index}).item<scalar_t>() * std::sph_bessel(l, x_item) - std::sph_bessel(l+1, x_item)
+        );
     }
 
 }
@@ -93,16 +89,14 @@ void _spherical_bessel_second_kind_forward(
     torch::Tensor output
     ) {
 
-    std::size_t total_size = 1;
-    for (const auto &size : x.sizes()) {
-        total_size *= size;
-    }
-    
-    scalar_t* x_ptr = x.data_ptr<scalar_t>();
-    scalar_t* output_ptr = output.data_ptr<scalar_t>();
+    int64_t size = x.sizes()[0];
 
-    for (std::size_t index = 0; index < total_size; index++) {
-        output_ptr[index] = std::sph_neumann(l, x_ptr[index]);
+    for (int64_t index = 0; index < size; index++) {
+        scalar_t x_item = x.index({index}).item<scalar_t>();
+        output.index_put_(
+            {index}, 
+            std::sph_neumann(l, x_item)
+        );
     }
 
 }
@@ -134,16 +128,14 @@ void _spherical_bessel_second_kind_backward(
     torch::Tensor derivatives
     ) {
 
-    std::size_t total_size = 1;
-    for (const auto &size : x.sizes()) {
-        total_size *= size;
-    }
-    
-    scalar_t* x_ptr = x.data_ptr<scalar_t>();
-    scalar_t* derivatives_ptr = derivatives.data_ptr<scalar_t>();
+    int64_t size = x.sizes()[0];
 
-    for (std::size_t index = 0; index < total_size; index++) {
-        derivatives_ptr[index] = (l/x_ptr[index]) * std::sph_neumann(l, x_ptr[index]) - std::sph_neumann(l+1, x_ptr[index]);
+    for (int64_t index = 0; index < size; index++) {
+        scalar_t x_item = x.index({index}).item<scalar_t>();
+        derivatives.index_put_(
+            {index}, 
+            l/x_item * std::sph_neumann(l, x_item) - std::sph_neumann(l+1, x_item)
+        );
     }
 
 }

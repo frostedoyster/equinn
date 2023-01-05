@@ -29,6 +29,7 @@ hypers_equinn = {
     "radial basis": {
         "cutoff radius": a,
         "mode": "full bessel",
+        "kind": "first",
         "l_max": l_max,
         "n_max": [n_max, n_max, n_max, n_max]
     },
@@ -152,7 +153,7 @@ spherical_expansion_coefficients_rascaline.keys_to_properties(all_neighbor_speci
 
 for a_i in all_species:
     for l in range(l_max+1):
-        e = spherical_expansion_coefficients_equinn.block(l=l, a_i=a_i).values
+        e = spherical_expansion_coefficients_equinn.block(lam=l, a_i=a_i).values
         r = torch.tensor(spherical_expansion_coefficients_rascaline.block(species_center=a_i, spherical_harmonics_l=l).values, dtype=torch.get_default_dtype())
 
 print("assertions passed!")

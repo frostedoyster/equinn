@@ -70,40 +70,38 @@ void _spherical_harmonics_forward(
     std::vector<torch::Tensor> output
     ) {
 
-    std::size_t input_size = cos_theta.sizes()[0];
-    
-    scalar_t* cos_theta_ptr = cos_theta.data_ptr<scalar_t>();
-    scalar_t* phi_ptr = phi.data_ptr<scalar_t>();
-    std::vector<scalar_t*> output_ptrs; 
-    
-    for (const auto &tensor : output) {
-        output_ptrs.push_back(tensor.data_ptr<scalar_t>());
-    }
+    int64_t input_size = cos_theta.sizes()[0];
 
-    for (std::size_t index = 0; index < input_size; index++) {
-        scalar_t cost = cos_theta_ptr[index];
-        scalar_t ph = phi_ptr[index];
+    for (int64_t index = 0; index < input_size; index++) {
+        scalar_t cost = cos_theta.index({index}).item<scalar_t>();
+        scalar_t ph = phi.index({index}).item<scalar_t>();
 
         std::vector<std::vector<scalar_t>> plm = associated_legendre_polynomials(l_max, cost);
 
         for (int l=0; l<=l_max; l++) {
             for (int m=-l; m<=l; m++) {
                 if (m > 0) {
-                    output_ptrs[l][index*(2*l+1)+m+l] =
+                    output[l].index_put_(
+                        {index, m+l},
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l-m)/factorial(l+m))
                         * plm[l][m]
-                        * std::cos(m*ph);
+                        * std::cos(m*ph)
+                    );
                 } else if (m < 0) {
-                    output_ptrs[l][index*(2*l+1)+m+l] =
+                    output[l].index_put_(
+                        {index, m+l},
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l+m)/factorial(l-m))
                         * plm[l][-m]
-                        * std::sin(-m*ph);
+                        * std::sin(-m*ph)
+                    );
                 } else {  // m == 0
-                    output_ptrs[l][index*(2*l+1)+m+l] = 
+                    output[l].index_put_(
+                        {index, m+l},
                         std::sqrt((2*l+1)/(4*M_PI))
-                        * plm[l][m];
+                        * plm[l][m]
+                    );
                 }
             }
         }
@@ -148,23 +146,11 @@ void _spherical_harmonics_backward(
     std::vector<torch::Tensor> d_output_d_phi
     ) {
 
-    std::size_t input_size = cos_theta.sizes()[0];
-    
-    scalar_t* cos_theta_ptr = cos_theta.data_ptr<scalar_t>();
-    scalar_t* phi_ptr = phi.data_ptr<scalar_t>();
-    std::vector<scalar_t*> d_output_d_cos_theta_ptrs;
-    std::vector<scalar_t*> d_output_d_phi_ptrs;
-    
-    for (const auto &tensor : d_output_d_cos_theta) {
-        d_output_d_cos_theta_ptrs.push_back(tensor.data_ptr<scalar_t>());
-    }
-    for (const auto &tensor : d_output_d_phi) {
-        d_output_d_phi_ptrs.push_back(tensor.data_ptr<scalar_t>());
-    }
+    int64_t input_size = cos_theta.sizes()[0];
 
-    for (std::size_t index = 0; index < input_size; index++) {
-        scalar_t cost = cos_theta_ptr[index];
-        scalar_t ph = phi_ptr[index];
+    for (int64_t index = 0; index < input_size; index++) {
+        scalar_t cost = cos_theta.index({index}).item<scalar_t>();
+        scalar_t ph = phi.index({index}).item<scalar_t>();
 
         std::vector<std::vector<scalar_t>> plm = associated_legendre_polynomials(l_max, cost);  // Could these be carried over from the forward pass?
         std::vector<std::vector<scalar_t>> d_plm_d_cost = associated_legendre_polynomial_derivatives(l_max, cost, plm);
@@ -172,32 +158,45 @@ void _spherical_harmonics_backward(
         for (int l=0; l<=l_max; l++) {
             for (int m=-l; m<=l; m++) {
                 if (m > 0) {
-                    d_output_d_cos_theta_ptrs[l][index*(2*l+1)+m+l] =
+                    d_output_d_cos_theta[l].index_put_(
+                        {index, m+l},
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l-m)/factorial(l+m))
                         * d_plm_d_cost[l][m]
-                        * std::cos(m*ph);
-                    d_output_d_phi_ptrs[l][index*(2*l+1)+m+l] =
+                        * std::cos(m*ph)
+                    );
+                    d_output_d_phi[l].index_put_(
+                        {index, m+l},
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l-m)/factorial(l+m))
                         * plm[l][m]
-                        * (-std::sin(m*ph));
+                        * (-std::sin(m*ph))
+                    );
                 } else if (m < 0) {
-                    d_output_d_cos_theta_ptrs[l][index*(2*l+1)+m+l] =
+                    d_output_d_cos_theta[l].index_put_(
+                        {index, m+l},
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l+m)/factorial(l-m))
                         * d_plm_d_cost[l][-m]
-                        * std::sin(-m*ph);
-                    d_output_d_phi_ptrs[l][index*(2*l+1)+m+l] =
+                        * std::sin(-m*ph)
+                    );
+                    d_output_d_phi[l].index_put_(
+                        {index, m+l},
                         std::pow(-1, m) * std::sqrt(2.0) 
                         * std::sqrt((2*l+1)/(4*M_PI)*factorial(l+m)/factorial(l-m))
                         * plm[l][-m]
-                        * std::cos(-m*ph);
+                        * std::cos(-m*ph)
+                    );
                 } else {  // m == 0
-                    d_output_d_cos_theta_ptrs[l][index*(2*l+1)+m+l] = 
+                    d_output_d_cos_theta[l].index_put_(
+                        {index, m+l}, 
                         std::sqrt((2*l+1)/(4*M_PI))
-                        * d_plm_d_cost[l][m];
-                    d_output_d_phi_ptrs[l][index*(2*l+1)+m+l] = 0.0;
+                        * d_plm_d_cost[l][m]
+                    );
+                    d_output_d_phi[l].index_put_(
+                        {index, m+l}, 
+                        0.0
+                    );
                 }
             }
         }

@@ -9,6 +9,7 @@ from equinn.structures import Structures
 from equinn.error_measures import get_mae, get_rmse, get_sse
 from equinn.conversions import get_conversions
 from equinn.power_spectrum import PowerSpectrum
+from equinn.contractions import LinearContractionBlock
 
 def run_fit(**parameters):
 
@@ -25,6 +26,7 @@ def run_fit(**parameters):
     n_test = parameters["n_test"]
     n_train = parameters["n_train"]
     r_cut = parameters["r_cut"]
+    optimizer_name = parameters["optimizer"]
 
     np.random.seed(random_seed)
     print(f"Random seed: {random_seed}")
@@ -48,7 +50,7 @@ def run_fit(**parameters):
 
     n_max = [9, 8, 7, 7, 6, 5]
     l_max = len(n_max) - 1
-    n_max_rs = [6]
+    n_max_rs = [8]
 
     hypers = {
         "cutoff radius": r_cut,
@@ -84,37 +86,44 @@ def run_fit(**parameters):
             super().__init__()
             self.all_species = all_species
             self.radial_spectrum_calculator = SphericalExpansion(hypers_rs, all_species)
+            self.radial_spectrum_contractor = LinearContractionBlock(
+                {(a_i, 0, 1): (8*len(self.all_species), 9) for a_i in self.all_species}
+            )
             self.spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
             self.power_spectrum_calculator = PowerSpectrum(all_species)
+            self.additive = torch.nn.Parameter(torch.tensor([0.0]))
             self.radial_spectrum_model = torch.nn.ModuleDict({
-                str(a_i): torch.nn.Linear(n_feat[0], 1) for a_i in self.all_species
+                str(a_i): torch.nn.Linear(9, 1, bias=False) for a_i in self.all_species
             })
+            """
             self.power_spectrum_model = torch.nn.ModuleDict({
-                str(a_i): torch.nn.Linear(n_feat[1], 1) for a_i in self.all_species
+                str(a_i): torch.nn.Linear(n_feat[1], 1, bias=False) for a_i in self.all_species
             })
+            """
             self.do_forces = do_forces
 
         def forward(self, structures, is_training=True):
 
-            print("Transforming structures")
+            #print("Transforming structures")
             structures = Structures(structures)
             energies = torch.zeros((structures.n_structures,))
 
             if self.do_forces:
                 structures.positions.requires_grad = True
 
-            print("Calculating RS")
+            #print("Calculating RS")
             radial_spectrum = self.radial_spectrum_calculator(structures)
+            radial_spectrum = self.radial_spectrum_contractor(radial_spectrum)
             """
             spherical_expansion = self.spherical_expansion_calculator(structures)
             power_spectrum = self.power_spectrum_calculator(spherical_expansion, spherical_expansion)
             """
 
-            print("Calculating energies")
+            #print("Calculating energies")
             atomic_energies = []
             structure_indices = []
             for a_i in self.all_species:
-                block = radial_spectrum.block(a_i=a_i, l=0)
+                block = radial_spectrum.block(a_i=a_i, lam=0, sigma=1)
                 features = block.values.squeeze(dim=1)
                 structure_indices.append(block.samples["structure"])
                 atomic_energies.append(
@@ -124,6 +133,7 @@ def run_fit(**parameters):
             structure_indices = torch.LongTensor(np.concatenate(structure_indices))
             
             energies.index_add_(dim=0, index=structure_indices, source=atomic_energies_rs)
+            energies += self.additive
 
             """
             atomic_energies = []
@@ -138,7 +148,7 @@ def run_fit(**parameters):
             energies.index_add_(dim=0, index=structure_indices, source=atomic_energies_ps)
             """
 
-            print("Computing forces by backpropagation")
+            #print("Computing forces by backpropagation")
             if self.do_forces:
                 forces = compute_forces(energies, structures.positions, is_training=is_training)
             else:
@@ -188,9 +198,8 @@ def run_fit(**parameters):
     model = Model(hypers_rs, hypers, n_feat, all_species, do_forces=do_forces)
     print(model)
 
-    optimizer_name = "LBFGS"
     if optimizer_name == "Adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e2) 
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-1) 
         batch_size = 10
     else:
         optimizer = torch.optim.LBFGS(model.parameters())
@@ -200,7 +209,24 @@ def run_fit(**parameters):
 
     avg = torch.mean(torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor)
 
-    for epoch in range(4):
+
+
+    predicted_train_energies, predicted_train_forces = model(train_structures, is_training=False)
+    predicted_test_energies, predicted_test_forces = model(test_structures, is_training=False)
+    train_energies = torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor - avg
+    test_energies = torch.tensor([structure.info[target_key] for structure in test_structures])*energy_conversion_factor - avg
+    if do_forces:
+        train_forces = torch.tensor(np.concatenate([structure.get_forces() for structure in train_structures], axis=0))*force_conversion_factor
+        test_forces = torch.tensor(np.concatenate([structure.get_forces() for structure in test_structures], axis=0))*force_conversion_factor
+    print()
+    print(f"Before training")
+    print(f"Energy errors: Train RMSE: {get_rmse(predicted_train_energies, train_energies)}, Train MAE: {get_mae(predicted_train_energies, train_energies)}, Test RMSE: {get_rmse(predicted_test_energies, test_energies)}, Test MAE: {get_mae(predicted_test_energies, test_energies)}")
+    if do_forces:
+        print(f"Force errors: Train RMSE: {get_rmse(predicted_train_forces, train_forces)}, Train MAE: {get_mae(predicted_train_forces, train_forces)}, Test RMSE: {get_rmse(predicted_test_forces, test_forces)}, Test MAE: {get_mae(predicted_test_forces, test_forces)}")
+
+    for epoch in range(50):
+
+        #force_weight = 1.0 if epoch < 10 else 1e-3
         
         total_loss = model.train_epoch(data_loader, force_weight)
 

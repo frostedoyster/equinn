@@ -54,7 +54,7 @@ class SphericalExpansion(torch.nn.Module):
             for a_i in self.all_species:
                 where_ai = np.where(ai_new_indices == a_i)[0]
                 densities_ai_l = densities_l[where_ai]
-                labels.append([a_i, l])
+                labels.append([a_i, l, 1])
                 blocks.append(
                     TensorBlock(
                         values = densities_ai_l,
@@ -79,7 +79,7 @@ class SphericalExpansion(torch.nn.Module):
 
         spherical_expansion = TensorMap(
             keys = Labels(
-                names = ["a_i", "l"],
+                names = ["a_i", "lam", "sigma"],
                 values = np.array(labels)
             ),
             blocks = blocks
