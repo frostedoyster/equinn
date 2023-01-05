@@ -46,9 +46,9 @@ def run_fit(**parameters):
     
     train_structures, test_structures = get_dataset_slices(dataset_path, train_slice, test_slice)
 
-    n_max = [7, 6, 5, 4, 3, 2, 2, 1, 1]
+    n_max = [9, 8, 7, 7, 6, 5]
     l_max = len(n_max) - 1
-    n_max_rs = [15]
+    n_max_rs = [6]
 
     hypers = {
         "cutoff radius": r_cut,
@@ -94,18 +94,23 @@ def run_fit(**parameters):
             })
             self.do_forces = do_forces
 
-        def forward(self, structures):
+        def forward(self, structures, is_training=True):
 
+            print("Transforming structures")
             structures = Structures(structures)
             energies = torch.zeros((structures.n_structures,))
 
             if self.do_forces:
                 structures.positions.requires_grad = True
 
+            print("Calculating RS")
             radial_spectrum = self.radial_spectrum_calculator(structures)
+            """
             spherical_expansion = self.spherical_expansion_calculator(structures)
             power_spectrum = self.power_spectrum_calculator(spherical_expansion, spherical_expansion)
+            """
 
+            print("Calculating energies")
             atomic_energies = []
             structure_indices = []
             for a_i in self.all_species:
@@ -120,6 +125,7 @@ def run_fit(**parameters):
             
             energies.index_add_(dim=0, index=structure_indices, source=atomic_energies_rs)
 
+            """
             atomic_energies = []
             for a_i in self.all_species:
                 block = power_spectrum.block(a_i=a_i)
@@ -130,13 +136,50 @@ def run_fit(**parameters):
             
             atomic_energies_ps = torch.concat(atomic_energies)
             energies.index_add_(dim=0, index=structure_indices, source=atomic_energies_ps)
+            """
 
+            print("Computing forces by backpropagation")
             if self.do_forces:
-                forces = compute_forces(energies, structures.positions, True)
+                forces = compute_forces(energies, structures.positions, is_training=is_training)
             else:
                 forces = None  # Or zero-dimensional tensor?
 
             return energies, forces
+
+        def train_epoch(self, data_loader, force_weight):
+            
+            if optimizer_name == "Adam":
+                total_loss = 0.0
+                for batch in data_loader:
+                    optimizer.zero_grad()
+                    predicted_energies, predicted_forces = model(batch)
+                    energies = torch.tensor([structure.info[target_key] for structure in batch])*energy_conversion_factor - avg
+                    loss = get_sse(predicted_energies, energies)
+                    if do_forces:
+                        forces = torch.tensor(np.concatenate([structure.get_forces() for structure in batch], axis=0))*force_conversion_factor
+                        loss += force_weight * get_sse(predicted_forces, forces)
+                    loss.backward()
+                    optimizer.step()
+                    total_loss += loss.item()
+            else:
+                def closure():
+                    optimizer.zero_grad()
+                    for train_structures in data_loader:
+                        predicted_energies, predicted_forces = model(train_structures)
+                        energies = torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor - avg
+                        loss = get_sse(predicted_energies, energies)
+                        if do_forces:
+                            forces = torch.tensor(np.concatenate([structure.get_forces() for structure in train_structures], axis=0))*force_conversion_factor
+                            loss += force_weight * get_sse(predicted_forces, forces)
+                    loss.backward()
+                    return loss
+                loss = optimizer.step(closure)
+                total_loss = loss.item()
+
+            return total_loss
+
+        # def print_state()... Would print loss, train errors, validation errors, test errors, ...
+
 
     n_feat = [
         n_max_rs[0]*len(all_species),
@@ -144,27 +187,25 @@ def run_fit(**parameters):
     ]
     model = Model(hypers_rs, hypers, n_feat, all_species, do_forces=do_forces)
     print(model)
-    data_loader = torch.utils.data.DataLoader(train_structures, batch_size=10, shuffle=True, collate_fn=(lambda x: x))
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e0) 
+
+    optimizer_name = "LBFGS"
+    if optimizer_name == "Adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e2) 
+        batch_size = 10
+    else:
+        optimizer = torch.optim.LBFGS(model.parameters())
+        batch_size = n_train
+
+    data_loader = torch.utils.data.DataLoader(train_structures, batch_size=batch_size, shuffle=True, collate_fn=(lambda x: x))
 
     avg = torch.mean(torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor)
 
-    for epoch in range(1000):
-        total_loss = 0.0
-        for batch in data_loader:
-            optimizer.zero_grad()
-            predicted_energies, predicted_forces = model(batch)
-            energies = torch.tensor([structure.info[target_key] for structure in batch])*energy_conversion_factor - avg
-            loss = get_sse(predicted_energies, energies)
-            if do_forces:
-                forces = torch.tensor(np.concatenate([structure.get_forces() for structure in batch], axis=0))*force_conversion_factor
-                loss += force_weight * get_sse(predicted_forces, forces)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+    for epoch in range(4):
+        
+        total_loss = model.train_epoch(data_loader, force_weight)
 
-        predicted_train_energies, predicted_train_forces = model(train_structures)
-        predicted_test_energies, predicted_test_forces = model(test_structures)
+        predicted_train_energies, predicted_train_forces = model(train_structures, is_training=False)
+        predicted_test_energies, predicted_test_forces = model(test_structures, is_training=False)
         train_energies = torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor - avg
         test_energies = torch.tensor([structure.info[target_key] for structure in test_structures])*energy_conversion_factor - avg
         if do_forces:
@@ -176,7 +217,22 @@ def run_fit(**parameters):
         print(f"Energy errors: Train RMSE: {get_rmse(predicted_train_energies, train_energies)}, Train MAE: {get_mae(predicted_train_energies, train_energies)}, Test RMSE: {get_rmse(predicted_test_energies, test_energies)}, Test MAE: {get_mae(predicted_test_energies, test_energies)}")
         if do_forces:
             print(f"Force errors: Train RMSE: {get_rmse(predicted_train_forces, train_forces)}, Train MAE: {get_mae(predicted_train_forces, train_forces)}, Test RMSE: {get_rmse(predicted_test_forces, test_forces)}, Test MAE: {get_mae(predicted_test_forces, test_forces)}")
-    
+
+    import ase
+    import matplotlib.pyplot as plt
+    atomic_species_strings = {number: name for name, number in ase.data.atomic_numbers.items()}
+    for a_i in all_species:
+        for a_j in all_species:
+            r_array = np.linspace(0.2, 5.0, 100)
+            structures = [
+                ase.Atoms(atomic_species_strings[a_i] + atomic_species_strings[a_j], positions = np.array([[0.0, 0.0, 0.0], [r, 0.0, 0.0]]))
+                for r in r_array
+            ]
+            energies, _ = model(structures, is_training=False)
+            energies = energies.detach().numpy()
+            fig, ax = plt.subplots(nrows=1, ncols=1)
+            ax.plot(r_array, energies)
+            fig.savefig(atomic_species_strings[a_i] + atomic_species_strings[a_j] + ".pdf")
 
 
 
