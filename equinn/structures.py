@@ -31,3 +31,7 @@ class Structures:
         self.atomic_species = atomic_species
         self.pbcs = pbcs
 
+    def to(self, device):
+
+        self.positions = self.positions.to(device)
+

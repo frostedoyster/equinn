@@ -41,8 +41,12 @@ class SphericalExpansion(torch.nn.Module):
         densities = []
         for l in range(l_max+1):
             expanded_vectors_l = expanded_vectors.block(l=l).values
-            densities_l = torch.zeros(n_centers*n_species, expanded_vectors_l.shape[1], expanded_vectors_l.shape[2])
-            densities_l.index_add_(dim=0, index=density_indices, source=expanded_vectors_l)
+            densities_l = torch.zeros(
+                (n_centers*n_species, expanded_vectors_l.shape[1], expanded_vectors_l.shape[2]), 
+                dtype = torch.get_default_dtype(),
+                device = expanded_vectors_l.device
+            )
+            densities_l.index_add_(dim=0, index=density_indices.to(expanded_vectors_l.device), source=expanded_vectors_l)
             densities_l = densities_l.reshape((n_centers, n_species, 2*l+1, -1)).swapaxes(1, 2).reshape((n_centers, 2*l+1, -1))
             densities.append(densities_l)
 
@@ -160,7 +164,7 @@ def get_cartesian_vectors(structures, cutoff_radius):
         where_selected_structure = np.where(structures.structure_indices == structure_index)[0]
 
         centers, neighbors, unit_cell_shift_vectors = get_neighbor_list(
-            structures.positions.detach().clone().numpy()[where_selected_structure], 
+            structures.positions.detach().cpu().clone().numpy()[where_selected_structure], 
             structures.pbcs[structure_index], 
             structures.cells[structure_index], 
             cutoff_radius) 
@@ -169,7 +173,7 @@ def get_cartesian_vectors(structures, cutoff_radius):
         cell = torch.tensor(np.array(structures.cells[structure_index]), dtype=torch.get_default_dtype())
         species = structures.atomic_species[structure_index]
 
-        structure_vectors = positions[neighbors] - positions[centers] + unit_cell_shift_vectors @ cell  # Warning: it works but in a weird way when there is no cell
+        structure_vectors = positions[neighbors] - positions[centers] + (unit_cell_shift_vectors @ cell).to(positions.device)  # Warning: it works but in a weird way when there is no cell
         vectors.append(structure_vectors)
         labels.append(
             np.stack([

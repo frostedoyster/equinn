@@ -32,7 +32,7 @@ def run_fit(**parameters):
     print(f"Random seed: {random_seed}")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Calculating features on {device}")
+    print(f"Training on {device}")
 
     conversions = get_conversions()
     energy_conversion_factor = conversions[energy_conversion]
@@ -87,13 +87,13 @@ def run_fit(**parameters):
             self.all_species = all_species
             self.radial_spectrum_calculator = SphericalExpansion(hypers_rs, all_species)
             self.radial_spectrum_contractor = LinearContractionBlock(
-                {(a_i, 0, 1): (8*len(self.all_species), 9) for a_i in self.all_species}
+                {(a_i, 0, 1): (8*len(self.all_species), 19) for a_i in self.all_species}
             )
             self.spherical_expansion_calculator = SphericalExpansion(hypers, all_species)
             self.power_spectrum_calculator = PowerSpectrum(all_species)
             self.additive = torch.nn.Parameter(torch.tensor([0.0]))
             self.radial_spectrum_model = torch.nn.ModuleDict({
-                str(a_i): torch.nn.Linear(9, 1, bias=False) for a_i in self.all_species
+                str(a_i): torch.nn.Linear(19, 1, bias=False) for a_i in self.all_species
             })
             """
             self.power_spectrum_model = torch.nn.ModuleDict({
@@ -106,7 +106,8 @@ def run_fit(**parameters):
 
             #print("Transforming structures")
             structures = Structures(structures)
-            energies = torch.zeros((structures.n_structures,))
+            structures.to(device)
+            energies = torch.zeros((structures.n_structures,), device=device, dtype=torch.get_default_dtype())
 
             if self.do_forces:
                 structures.positions.requires_grad = True
@@ -132,7 +133,7 @@ def run_fit(**parameters):
             atomic_energies_rs = torch.concat(atomic_energies)
             structure_indices = torch.LongTensor(np.concatenate(structure_indices))
             
-            energies.index_add_(dim=0, index=structure_indices, source=atomic_energies_rs)
+            energies.index_add_(dim=0, index=structure_indices.to(device), source=atomic_energies_rs)
             energies += self.additive
 
             """
@@ -164,9 +165,11 @@ def run_fit(**parameters):
                     optimizer.zero_grad()
                     predicted_energies, predicted_forces = model(batch)
                     energies = torch.tensor([structure.info[target_key] for structure in batch])*energy_conversion_factor - avg
+                    energies = energies.to(device)
                     loss = get_sse(predicted_energies, energies)
                     if do_forces:
                         forces = torch.tensor(np.concatenate([structure.get_forces() for structure in batch], axis=0))*force_conversion_factor
+                        forces = forces.to(device)
                         loss += force_weight * get_sse(predicted_forces, forces)
                     loss.backward()
                     optimizer.step()
@@ -175,11 +178,14 @@ def run_fit(**parameters):
                 def closure():
                     optimizer.zero_grad()
                     for train_structures in data_loader:
+                        batch.to(device)
                         predicted_energies, predicted_forces = model(train_structures)
                         energies = torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor - avg
+                        energies = energies.to(device)
                         loss = get_sse(predicted_energies, energies)
                         if do_forces:
                             forces = torch.tensor(np.concatenate([structure.get_forces() for structure in train_structures], axis=0))*force_conversion_factor
+                            forces = forces.to(device)
                             loss += force_weight * get_sse(predicted_forces, forces)
                     loss.backward()
                     return loss
@@ -195,14 +201,14 @@ def run_fit(**parameters):
         n_max_rs[0]*len(all_species),
         sum([n_max[l]**2 * len(all_species)**2 for l in range(l_max+1)])
     ]
-    model = Model(hypers_rs, hypers, n_feat, all_species, do_forces=do_forces)
+    model = Model(hypers_rs, hypers, n_feat, all_species, do_forces=do_forces).to(device)
     print(model)
 
     if optimizer_name == "Adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-1) 
         batch_size = 10
     else:
-        optimizer = torch.optim.LBFGS(model.parameters())
+        optimizer = torch.optim.LBFGS(model.parameters(), lr=0.01)
         batch_size = n_train
 
     data_loader = torch.utils.data.DataLoader(train_structures, batch_size=batch_size, shuffle=True, collate_fn=(lambda x: x))
@@ -214,16 +220,22 @@ def run_fit(**parameters):
     predicted_train_energies, predicted_train_forces = model(train_structures, is_training=False)
     predicted_test_energies, predicted_test_forces = model(test_structures, is_training=False)
     train_energies = torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor - avg
+    train_energies = train_energies.to(device)
     test_energies = torch.tensor([structure.info[target_key] for structure in test_structures])*energy_conversion_factor - avg
+    test_energies = test_energies.to(device)
     if do_forces:
         train_forces = torch.tensor(np.concatenate([structure.get_forces() for structure in train_structures], axis=0))*force_conversion_factor
+        train_forces = train_forces.to(device)
         test_forces = torch.tensor(np.concatenate([structure.get_forces() for structure in test_structures], axis=0))*force_conversion_factor
+        test_forces = test_forces.to(device)
     print()
     print(f"Before training")
     print(f"Energy errors: Train RMSE: {get_rmse(predicted_train_energies, train_energies)}, Train MAE: {get_mae(predicted_train_energies, train_energies)}, Test RMSE: {get_rmse(predicted_test_energies, test_energies)}, Test MAE: {get_mae(predicted_test_energies, test_energies)}")
     if do_forces:
         print(f"Force errors: Train RMSE: {get_rmse(predicted_train_forces, train_forces)}, Train MAE: {get_mae(predicted_train_forces, train_forces)}, Test RMSE: {get_rmse(predicted_test_forces, test_forces)}, Test MAE: {get_mae(predicted_test_forces, test_forces)}")
 
+
+    #with torch.autograd.set_detect_anomaly(True):
     for epoch in range(50):
 
         #force_weight = 1.0 if epoch < 10 else 1e-3
@@ -233,16 +245,23 @@ def run_fit(**parameters):
         predicted_train_energies, predicted_train_forces = model(train_structures, is_training=False)
         predicted_test_energies, predicted_test_forces = model(test_structures, is_training=False)
         train_energies = torch.tensor([structure.info[target_key] for structure in train_structures])*energy_conversion_factor - avg
+        train_energies = train_energies.to(device)
         test_energies = torch.tensor([structure.info[target_key] for structure in test_structures])*energy_conversion_factor - avg
+        test_energies = test_energies.to(device)
         if do_forces:
             train_forces = torch.tensor(np.concatenate([structure.get_forces() for structure in train_structures], axis=0))*force_conversion_factor
+            train_forces = train_forces.to(device)
             test_forces = torch.tensor(np.concatenate([structure.get_forces() for structure in test_structures], axis=0))*force_conversion_factor
+            test_forces = test_forces.to(device)
 
         print()
         print(f"Epoch number {epoch}, Total loss: {total_loss}")
         print(f"Energy errors: Train RMSE: {get_rmse(predicted_train_energies, train_energies)}, Train MAE: {get_mae(predicted_train_energies, train_energies)}, Test RMSE: {get_rmse(predicted_test_energies, test_energies)}, Test MAE: {get_mae(predicted_test_energies, test_energies)}")
         if do_forces:
             print(f"Force errors: Train RMSE: {get_rmse(predicted_train_forces, train_forces)}, Train MAE: {get_mae(predicted_train_forces, train_forces)}, Test RMSE: {get_rmse(predicted_test_forces, test_forces)}, Test MAE: {get_mae(predicted_test_forces, test_forces)}")
+
+
+
 
     import ase
     import matplotlib.pyplot as plt

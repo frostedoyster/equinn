@@ -56,7 +56,6 @@ class SphericalBesselFirstKind(torch.autograd.Function):
     @staticmethod
     def forward(ctx, l, x):
 
-        assert(x.is_cpu)
         assert(len(x.shape) == 1)
         output = spherical_bessel.first_kind_forward(l, x)
         ctx.l = l
@@ -78,8 +77,6 @@ class SphericalBesselSecondKind(torch.autograd.Function):
     @staticmethod
     def forward(ctx, l, x):
 
-        assert(x.is_cpu)
-        assert(x.is_contiguous())
         output = spherical_bessel.second_kind_forward(l, x)
         ctx.l = l
         ctx.save_for_backward(x)
