@@ -155,5 +155,6 @@ for a_i in all_species:
     for l in range(l_max+1):
         e = spherical_expansion_coefficients_equinn.block(lam=l, a_i=a_i).values
         r = torch.tensor(spherical_expansion_coefficients_rascaline.block(species_center=a_i, spherical_harmonics_l=l).values, dtype=torch.get_default_dtype())
+        assert(torch.allclose(e, r))
 
 print("assertions passed!")

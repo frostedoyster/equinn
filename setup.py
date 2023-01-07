@@ -9,7 +9,7 @@ spherical_harmonics = cpp_extension.CppExtension('spherical_harmonics',
       ["equinn/extensions/spherical_harmonics.cc"], 
       extra_compile_args=["-std=c++17", "-fopenmp", "-w"])
 
-ext_modules = [spherical_bessel, spherical_harmonics]
+ext_modules = [spherical_bessel]
 
 setup(name='equinn',
       packages = find_packages(),
