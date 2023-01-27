@@ -8,7 +8,6 @@ from equinn.forces import compute_forces
 from equinn.structures import Structures
 from equinn.error_measures import get_mae, get_rmse, get_sse
 from equinn.conversions import get_conversions
-from equinn.contractions import LinearContractionBlock
 from equinn.cg_iterations import CGIteration
 from equinn.ghost import get_spherical_expansion_ghost
 from equinn.cg import ClebschGordanReal
@@ -142,12 +141,12 @@ def run_fit(**parameters):
             #print("Calculating RS")
             radial_spectrum = self.radial_spectrum_calculator(structures)
             # radial_spectrum = self.radial_spectrum_contractor(radial_spectrum)
-            spherical_expansion = self.spherical_expansion_calculator(structures)
-            nu2 = self.nu2_calculator(spherical_expansion, spherical_expansion)
+            # spherical_expansion = self.spherical_expansion_calculator(structures)
+            # nu2 = self.nu2_calculator(spherical_expansion, spherical_expansion)
 
             #print("Calculating energies")
             self._apply_layer(energies, radial_spectrum, self.radial_spectrum_model)
-            self._apply_layer(energies, nu2, self.nu2_model)
+            # self._apply_layer(energies, nu2, self.nu2_model)
 
             #print("Computing forces by backpropagation")
             if self.do_forces:
@@ -258,6 +257,7 @@ def run_fit(**parameters):
         #print(force_weight)
         
         total_loss = model.train_epoch(data_loader, force_weight)
+        print(model.additive)
 
         predicted_train_energies, predicted_train_forces = model(train_structures, is_training=False)
         predicted_test_energies, predicted_test_forces = model(test_structures, is_training=False)
@@ -279,7 +279,8 @@ def run_fit(**parameters):
 
 
 
-
+    """
+    # Code that prints plots of the the two-body curves for each chemical element pair
     import ase
     import matplotlib.pyplot as plt
     atomic_species_strings = {number: name for name, number in ase.data.atomic_numbers.items()}
@@ -295,6 +296,7 @@ def run_fit(**parameters):
             fig, ax = plt.subplots(nrows=1, ncols=1)
             ax.plot(r_array, energies)
             fig.savefig(atomic_species_strings[a_i] + atomic_species_strings[a_j] + ".pdf")
+    """
 
 
 

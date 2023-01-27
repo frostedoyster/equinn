@@ -46,7 +46,7 @@ def associated_legendre_polynomials(l_max: int, x):
 def spherical_harmonics(l_max: int, cos_theta, phi):
 
     sqrt_2 = torch.sqrt(torch.tensor([2.0], device=cos_theta.device, dtype=cos_theta.dtype))
-    pi = 2.0 * torch.acos(torch.zeros(1))
+    pi = 2.0 * torch.acos(torch.zeros(1, device=cos_theta.device))
 
     Plm = associated_legendre_polynomials(l_max, cos_theta)
     phi = phi.unsqueeze(dim=-1)
@@ -54,7 +54,7 @@ def spherical_harmonics(l_max: int, cos_theta, phi):
 
     output = []
     for l in range(l_max+1):
-        m = torch.LongTensor(list(range(-l, l+1)))
+        m = torch.tensor(list(range(-l, l+1)), dtype=torch.long, device=phi.device)
         abs_m = torch.abs(m)
         Phi = torch.cat([
             torch.sin(abs_m[:l]*phi),
