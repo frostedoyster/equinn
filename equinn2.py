@@ -141,12 +141,12 @@ def run_fit(**parameters):
             #print("Calculating RS")
             radial_spectrum = self.radial_spectrum_calculator(structures)
             # radial_spectrum = self.radial_spectrum_contractor(radial_spectrum)
-            # spherical_expansion = self.spherical_expansion_calculator(structures)
-            # nu2 = self.nu2_calculator(spherical_expansion, spherical_expansion)
+            spherical_expansion = self.spherical_expansion_calculator(structures)
+            nu2 = self.nu2_calculator(spherical_expansion, spherical_expansion)
 
             #print("Calculating energies")
             self._apply_layer(energies, radial_spectrum, self.radial_spectrum_model)
-            # self._apply_layer(energies, nu2, self.nu2_model)
+            self._apply_layer(energies, nu2, self.nu2_model)
 
             #print("Computing forces by backpropagation")
             if self.do_forces:
