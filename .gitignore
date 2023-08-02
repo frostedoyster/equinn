@@ -8,3 +8,6 @@ splines.txt
 silly/
 equinn/extensions/old/
 equinn/old/
+old/
+*.sh
+*.out
