@@ -6,7 +6,8 @@ from torch_spex.structures import InMemoryDataset, TransformerNeighborList, Tran
 from torch_spex.spherical_expansions import SphericalExpansion
 from power_spectrum import PowerSpectrum
 from torch_spex.normalize import get_average_number_of_neighbors, normalize_true, normalize_false
-import equistore
+import metatensor
+import metatensor.torch
 from ps_ln import normalize_ps
 
 # Conversions
@@ -40,9 +41,9 @@ target_key = "energy"
 dataset_path = "datasets/alchemical.xyz"
 do_forces = True
 force_weight = 10.0
-n_test = 200
-n_train = 2000
-r_cut = 6.0
+n_test = 2000
+n_train = 20000
+r_cut = 5.0
 optimizer_name = "Adam"
 
 np.random.seed(random_seed)
@@ -67,7 +68,7 @@ else:
 train_structures, test_structures = get_dataset_slices(dataset_path, train_slice, test_slice)
 
 #######################################
-print("common pseudo 4 pseudo correct normalization higher Emax layernorm 10.0 rcut 6.0 scale 3.0")
+print("scale 2.5")
 #######################################
 
 n_pseudo = 4
@@ -79,9 +80,9 @@ hypers = {
     "radial basis": {
         "type": "physical",
         "cost_trade_off": False,
-        "scale": 3.0,
+        "scale": 2.5,
         "r_cut": r_cut,
-        "E_max": 500,
+        "E_max": 400,
         "mlp": True
     }
 }
@@ -96,6 +97,7 @@ average_number_of_atoms = sum([structure.get_atomic_numbers().shape[0] for struc
 print("Average number of atoms per structure:", average_number_of_atoms)
 
 all_species = np.sort(np.unique(np.concatenate([train_structure.numbers for train_structure in train_structures] + [test_structure.numbers for test_structure in test_structures])))
+all_species = list(int(a_i) for a_i in all_species)
 print(f"All species: {all_species}")
 
 
@@ -111,9 +113,9 @@ class Model(torch.nn.Module):
         n_feat = sum([n_max[l]**2 * n_pseudo**2 for l in range(l_max+1)])
         self.ps_calculator = PowerSpectrum(l_max, all_species)
         self.combination_matrix = self.spherical_expansion_calculator.vector_expansion_calculator.radial_basis_calculator.combination_matrix
-        self.all_species_labels = equistore.Labels(
+        self.all_species_labels = metatensor.torch.Labels(
             names = ["a_i"],
-            values = all_species[:, None]
+            values = torch.tensor(all_species, device=device).reshape(-1, 1)
         )
         self.nu2_model = torch.nn.ModuleDict({
             str(alpha_i): torch.nn.Sequential(
@@ -132,12 +134,10 @@ class Model(torch.nn.Module):
 
     def forward(self, structures, is_training=True):
 
-        n_structures = len(structures["positions"])
+        n_structures = len(structures["cells"])
         energies = torch.zeros((n_structures,), device=device, dtype=torch.get_default_dtype())
 
-        if self.do_forces:
-            for structure_positions in structures["positions"]:
-                structure_positions.requires_grad = True
+        if self.do_forces: structures["positions"].requires_grad = True
 
         # print("Calculating spherical expansion")
         spherical_expansion = self.spherical_expansion_calculator(**structures)
@@ -168,7 +168,7 @@ class Model(torch.nn.Module):
             batch.pop("forces")
             predicted_energies_batch, predicted_forces_batch = model(batch, is_training=False)
             predicted_energies.append(predicted_energies_batch)
-            predicted_forces.extend(predicted_forces_batch)  # the predicted forces for the batch are themselves a list
+            predicted_forces.append(predicted_forces_batch)  # the predicted forces for the batch are themselves a list
 
         predicted_energies = torch.concatenate(predicted_energies, dim=0)
         predicted_forces = torch.concatenate(predicted_forces, dim=0)
@@ -188,7 +188,6 @@ class Model(torch.nn.Module):
                 loss = get_sse(predicted_energies, energies)
                 if do_forces:
                     forces = forces.to(device)
-                    predicted_forces = torch.concatenate(predicted_forces)
                     loss += force_weight * get_sse(predicted_forces, forces)
                 loss.backward()
                 optimizer.step()
@@ -224,7 +223,7 @@ class Model(torch.nn.Module):
         # print(block.values)
         samples = block.samples
         one_hot_ai = torch.tensor(
-            equistore.one_hot(samples, self.all_species_labels),
+            metatensor.torch.one_hot(samples, self.all_species_labels),
             dtype = torch.get_default_dtype(),
             device = block.values.device
         )
@@ -239,7 +238,7 @@ class Model(torch.nn.Module):
         if normalize:
             atomic_energies = atomic_energies / np.sqrt(n_pseudo)
         #print("total", torch.mean(atomic_energies), get_2_mom(atomic_energies))
-        structure_indices = torch.LongTensor(block.samples["structure"].copy())
+        structure_indices = block.samples["structure"]
         energies.index_add_(dim=0, index=structure_indices.to(device), source=atomic_energies)
         # print("in", torch.mean(energies), get_2_mom(energies))
         # THIS IN-PLACE MODIFICATION HAS TO CHANGE!
@@ -264,8 +263,8 @@ test_energies = test_energies.to(device)
 
 # Linear fit for one-body energies:
 import rascaline
-import equistore
-center_species_labels = equistore.Labels(
+import metatensor.torch
+center_species_labels = metatensor.Labels(
     names = ["species_center"],
     values = np.array(all_species).reshape(-1, 1)
 )
@@ -309,8 +308,8 @@ predict_train_dataset = InMemoryDataset(train_structures, transformers)
 predict_test_dataset = InMemoryDataset(test_structures, transformers)
 train_dataset = InMemoryDataset(train_structures, transformers)  # avoid sharing tensors between different dataloaders
 
-predict_train_data_loader = torch.utils.data.DataLoader(predict_train_dataset, batch_size=32, shuffle=False, collate_fn=collate_nl)
-predict_test_data_loader = torch.utils.data.DataLoader(predict_test_dataset, batch_size=32, shuffle=False, collate_fn=collate_nl)
+predict_train_data_loader = torch.utils.data.DataLoader(predict_train_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_nl)
+predict_test_data_loader = torch.utils.data.DataLoader(predict_test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_nl)
 train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_nl)
 
 print("Finished neighborlists")

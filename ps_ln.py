@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from equistore import Labels, TensorBlock, TensorMap
+from metatensor.torch import Labels, TensorBlock, TensorMap
 
 def normalize_ps(ps):
     new_keys = []
@@ -23,7 +23,7 @@ def normalize_ps(ps):
     return TensorMap(
         keys = Labels(
             names = ("a_i",),
-            values = np.array(new_keys),
+            values = torch.tensor(new_keys, device=new_blocks[0].values.device).reshape(-1, 1),
         ), 
         blocks = new_blocks
     )

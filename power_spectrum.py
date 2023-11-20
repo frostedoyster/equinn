@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from equistore import TensorMap, Labels, TensorBlock
+from metatensor.torch import TensorMap, Labels, TensorBlock
 
 class PowerSpectrum(torch.nn.Module):
 
@@ -20,7 +20,7 @@ class PowerSpectrum(torch.nn.Module):
             ps_values_ai = []
             for l in range(self.l_max+1):
                 cg = 1.0/np.sqrt(2*l+1)
-                block_ai_l = spex.block(lam=l, a_i=a_i)
+                block_ai_l = spex.block({"lam": l, "a_i": a_i})
                 c_ai_l = block_ai_l.values
 
                 # same as this:
@@ -44,7 +44,7 @@ class PowerSpectrum(torch.nn.Module):
         power_spectrum = TensorMap(
             keys = Labels(
                 names = ("a_i",),
-                values = np.array(keys), # .reshape((-1, 2)),
+                values = torch.tensor(keys, device=blocks[0].values.device), # .reshape((-1, 2)),
             ), 
             blocks = blocks
         )
